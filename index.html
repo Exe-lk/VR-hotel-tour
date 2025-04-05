@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>VR Hotel Tour</title>
+    <meta name="description" content="Interactive VR Hotel Tour for Booking Experience">
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://unpkg.com/aframe-event-set-component@5.0.0/dist/aframe-event-set-component.min.js"></script>
+    <script src="https://unpkg.com/aframe-layout-component@5.3.0/dist/aframe-layout-component.min.js"></script>
+    <script src="https://unpkg.com/aframe-template-component@3.2.1/dist/aframe-template-component.min.js"></script>
+    
+    <!-- Add FBX Model Support -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/fflate.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/FBXLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/aframe-extras@6.1.1/dist/aframe-extras.loaders.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/aframe-extras@6.1.1/dist/aframe-extras.animation-mixer.min.js"></script>
+    
+    <script src="script.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <a-scene>
+        <!-- Asset Management System -->
+        <a-assets>
+            <img id="lobby" src="assets/lobby.jpg">
+            <img id="reception" src="assets/reception.jpg">
+            <img id="room" src="assets/room.jpg">
+            <img id="info-icon" src="https://cdn-icons-png.flaticon.com/512/1076/1076337.png">
+            <img id="arrow-icon" src="https://cdn-icons-png.flaticon.com/512/2989/2989981.png">
+            <img id="home-icon" src="https://cdn-icons-png.flaticon.com/512/1946/1946488.png">
+            <img id="speech-bubble" src="https://cdn-icons-png.flaticon.com/512/1040/1040216.png">
+            
+            <!-- Virtual guide character model -->
+            <a-asset-item id="guide-model" src="assets/guide-character.fbx"></a-asset-item>
+        </a-assets>
+
+        <!-- Debug message for FBX loading status -->
+        <a-entity position="0 3 -3" text="value: Loading 3D Guide...; color: white; align: center;" id="debug-text"></a-entity>
+
+        <!-- Register custom FBX model component -->
+        <script>
+            // Register FBX model component with additional debugging
+            AFRAME.registerComponent('fbx-model', {
+                schema: {
+                    src: {type: 'string'}
+                },
+                
+                init: function () {
+                    const data = this.data;
+                    if (!data.src) {
+                        console.error('No src provided for FBX model');
+                        return;
+                    }
+
+                    const debugText = document.getElementById('debug-text');
+                    debugText.setAttribute('text', 'value', 'Loading FBX: ' + data.src);
+
+                    this.loader = new THREE.FBXLoader();
+                    
+                    this.el.addEventListener('model-loaded', () => {
+                        debugText.setAttribute('text', 'value', 'FBX Model loaded successfully!');
+                        console.log('Model loaded event fired');
+                    });
+
+                    this.loader.load(
+                        data.src, 
+                        (fbxModel) => {
+                            console.log('FBX model loaded successfully:', fbxModel);
+                            debugText.setAttribute('text', 'value', 'FBX Model loaded!');
+                            
+                            // Make sure model is visible
+                            fbxModel.visible = true;
+                            
+                            // Add the model to the entity
+                            this.el.setObject3D('mesh', fbxModel);
+                            this.el.emit('model-loaded', {format: 'fbx', model: fbxModel});
+                            
+                            // For debugging
+                            window.loadedModel = fbxModel;
+                            
+                            // Check if the model has animations
+                            if (fbxModel.animations && fbxModel.animations.length > 0) {
+                                console.log('Model has animations:', fbxModel.animations.length);
+                                fbxModel.animations.forEach((animation, index) => {
+                                    console.log(`Animation ${index}: ${animation.name}`);
+                                });
+                            } else {
+                                console.warn('Model has no animations');
+                            }
+                        },
+                        (xhr) => {
+                            console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+                            debugText.setAttribute('text', 'value', 'Loading: ' + Math.round(xhr.loaded / xhr.total * 100) + '%');
+                        },
+                        (error) => {
+                            console.error('Error loading FBX model:', error);
+                            debugText.setAttribute('text', 'value', 'Error loading FBX: ' + error.message);
+                        }
+                    );
+                },
+                
+                remove: function () {
+                    if (this.el.getObject3D('mesh')) {
+                        this.el.removeObject3D('mesh');
+                    }
+                }
+            });
+
+            // Guide interaction component
+            AFRAME.registerComponent('guide-interaction', {
+                init: function () {
+                    console.log('Guide interaction component initialized');
+                    // Set up interaction with the guide
+                    this.el.addEventListener('click', function () {
+                        // Get the current location
+                        const currentLocation = this.getAttribute('data-location');
+                        console.log('Guide clicked, location:', currentLocation);
+                        
+                        // Trigger the appropriate explanation
+                        window.showGuideExplanation(currentLocation);
+                    });
+                }
+            });
+        </script>
+
+        <!-- Camera + Cursor -->
+        <a-entity camera look-controls>
+            <a-entity cursor="fuse: true; fuseTimeout: 500"
+                      position="0 0 -1"
+                      geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03"
+                      material="color: white; shader: flat"
+                      animation__click="property: scale; startEvents: click; from: 0.1 0.1 0.1; to: 1 1 1; dur: 150"
+                      animation__fusing="property: scale; startEvents: fusing; from: 1 1 1; to: 0.1 0.1 0.1; dur: 1500"
+                      animation__mouseleave="property: scale; startEvents: mouseleave; to: 1 1 1; dur: 500"
+                      raycaster="objects: .clickable">
+            </a-entity>
+        </a-entity>
+
+        <!-- Start in the lobby -->
+        <a-sky id="skybox" src="#lobby" rotation="0 -90 0"></a-sky>
+
+        <!-- Persistent Home Button (always visible) -->
+        <a-entity id="home-button" position="0 0.8 -3" rotation="0 0 0" scale="0.5 0.5 0.5">
+            <a-image class="clickable" src="#home-icon" scale="0.7 0.7 0.7"
+                     data-target="lobby" data-target-img="#lobby"
+                     event-set__enter="_event: mouseenter; scale: 0.8 0.8 0.8"
+                     event-set__leave="_event: mouseleave; scale: 0.7 0.7 0.7">
+            </a-image>
+            <a-text value="LOBBY" position="0 -0.5 0" align="center" color="#FFF" scale="2 2 2"></a-text>
+        </a-entity>
+
+        <!-- Virtual Guide Characters -->
+        <a-entity id="guides">
+            <!-- Lobby Guide - positioned on the floor -->
+            <a-entity id="lobby-guide" class="guide clickable" visible="true"
+                      position="-2 0 -4"
+                      rotation="0 30 0"
+                      data-location="lobby"
+                      guide-interaction>
+                
+                <!-- Ground marker circle to show where the guide is standing -->
+                <a-circle color="#FFCC00" radius="0.4" position="0 0.01 0" rotation="-90 0 0" 
+                          material="side: double; opacity: 0.7"></a-circle>
+                
+                <!-- Actual FBX model - adjusted to stand on the floor -->
+                <a-entity 
+                    fbx-model="src: #guide-model"
+                    scale="0.1 0.1 0.1"
+                    animation-mixer="clip: *; loop: repeat; timeScale: 1"
+                    position="0 0 0">
+                </a-entity>
+                
+                <!-- Speech bubble positioned above the character -->
+                <a-image src="#speech-bubble" position="0 2.5 0" scale="0.8 0.8 0.8" 
+                        animation="property: scale; to: 0.9 0.9 0.9; dir: alternate; dur: 1000; loop: true"></a-image>
+                
+                <!-- Text label for identification -->
+                <a-text value="TOUR GUIDE" position="0 3.0 0" align="center" color="#FFCC00" scale="1.2 1.2 1.2"></a-text>
+            </a-entity>
+            
+            <!-- Room Guide - positioned on the floor -->
+            <a-entity id="room-guide" class="guide clickable" visible="false"
+                      position="2.5 0 -2"
+                      rotation="0 -45 0"
+                      data-location="room"
+                      guide-interaction>
+                
+                <!-- Ground marker circle -->
+                <a-circle color="#FFCC00" radius="0.4" position="0 0.01 0" rotation="-90 0 0" 
+                          material="side: double; opacity: 0.7"></a-circle>
+                
+                <!-- Actual FBX model - adjusted to stand on the floor -->
+                <a-entity 
+                    fbx-model="src: #guide-model"
+                    scale="0.1 0.1 0.1"
+                    animation-mixer="clip: *; loop: repeat; timeScale: 1"
+                    position="0 0 0">
+                </a-entity>
+                
+                <!-- Speech bubble positioned above the character -->
+                <a-image src="#speech-bubble" position="0 2.5 0" scale="0.8 0.8 0.8" 
+                        animation="property: scale; to: 0.9 0.9 0.9; dir: alternate; dur: 1000; loop: true"></a-image>
+                
+                <!-- Text label for identification -->
+                <a-text value="ROOM GUIDE" position="0 3.0 0" align="center" color="#FFCC00" scale="1.2 1.2 1.2"></a-text>
+            </a-entity>
+
+            <!-- Reception Guide - positioned on the floor -->
+            <a-entity id="reception-guide" class="guide clickable" visible="false"
+                      position="-0.5 0 -3.5"
+                      rotation="0 15 0"
+                      data-location="reception"
+                      guide-interaction>
+                
+                <!-- Ground marker circle -->
+                <a-circle color="#FFCC00" radius="0.4" position="0 0.01 0" rotation="-90 0 0" 
+                          material="side: double; opacity: 0.7"></a-circle>
+                
+                <!-- Actual FBX model - adjusted to stand on the floor -->
+                <a-entity 
+                    fbx-model="src: #guide-model"
+                    scale="0.1 0.1 0.1"
+                    animation-mixer="clip: *; loop: repeat; timeScale: 1"
+                    position="0 0 0">
+                </a-entity>
+                
+                <!-- Speech bubble positioned above the character -->
+                <a-image src="#speech-bubble" position="0 2.5 0" scale="0.8 0.8 0.8" 
+                        animation="property: scale; to: 0.9 0.9 0.9; dir: alternate; dur: 1000; loop: true"></a-image>
+                
+                <!-- Text label for identification -->
+                <a-text value="CONCIERGE" position="0 3.0 0" align="center" color="#FFCC00" scale="1.2 1.2 1.2"></a-text>
+            </a-entity>
+        </a-entity>
+
+        <!-- Guide Explanation Panels -->
+        <a-entity id="guide-explanations">
+            <a-entity id="lobby-explanation" class="explanation-panel" visible="false"
+                      position="0 1.6 -2" rotation="0 0 0" scale="2 2 2">
+                <a-plane color="#1e3a8a" width="1.5" height="1" opacity="0.85" border-radius="0.1"></a-plane>
+                <a-text value="Welcome to Hotel Grand VR!\n\nAs your virtual concierge, I'm here to help you explore our luxurious facilities. We offer several packages:\n\n- Weekend Getaway: 2 nights with spa access\n- Business Trip: High-speed WiFi and meeting rooms\n- Romantic Escape: Couples massage and fine dining\n\nClick on the arrows to explore different areas!"
+                       position="0 0 0.01" width="1.2" color="white" align="center"></a-text>
+                <a-text value="CLOSE" position="0 -0.4 0.01" width="1.2" color="#ff9" align="center" 
+                       class="clickable" data-action="close-explanation"></a-text>
+            </a-entity>
+
+            <a-entity id="room-explanation" class="explanation-panel" visible="false"
+                      position="0 1.6 -2" rotation="0 0 0" scale="2 2 2">
+                <a-plane color="#1e3a8a" width="1.5" height="1" opacity="0.85"></a-plane>
+                <a-text value="This is our Luxury Suite!\n\nDesigned for ultimate comfort with premium amenities:\n\n- King-sized memory foam mattress\n- 65\" OLED Smart TV\n- Panoramic views of the city\n- Private balcony\n- Rainfall shower and jacuzzi\n\nBook now for our special rate of $250/night!"
+                       position="0 0 0.01" width="1.2" color="white" align="center"></a-text>
+                <a-text value="CLOSE" position="0 -0.4 0.01" width="1.2" color="#ff9" align="center" 
+                       class="clickable" data-action="close-explanation"></a-text>
+            </a-entity>
+
+            <a-entity id="reception-explanation" class="explanation-panel" visible="false"
+                      position="0 1.6 -2" rotation="0 0 0" scale="2 2 2">
+                <a-plane color="#1e3a8a" width="1.5" height="1" opacity="0.85"></a-plane>
+                <a-text value="Welcome to our Reception Area!\n\nOur staff is available 24/7 to assist you with:\n\n- Express check-in/check-out\n- Concierge services\n- Tour bookings\n- Restaurant reservations\n- Transportation arrangements\n\nAsk about our loyalty program for special perks!"
+                       position="0 0 0.01" width="1.2" color="white" align="center"></a-text>
+                <a-text value="CLOSE" position="0 -0.4 0.01" width="1.2" color="#ff9" align="center" 
+                       class="clickable" data-action="close-explanation"></a-text>
+            </a-entity>
+        </a-entity>
+
+        <!-- Hotspots for navigation -->
+        <!-- Lobby Navigation Points -->
+        <a-entity id="lobby-hotspots" visible="true">
+            <a-image class="clickable" src="#arrow-icon" position="0 1.6 -4" scale="0.5 0.5 0.5"
+                     data-target="room" data-target-img="#room"
+                     event-set__enter="_event: mouseenter; scale: 0.6 0.6 0.6"
+                     event-set__leave="_event: mouseleave; scale: 0.5 0.5 0.5">
+            </a-image>
+            <a-text value="Guest Room" position="0 1.2 -4" align="center" color="#FFF" scale="1.5 1.5 1.5"></a-text>
+
+            <a-image class="clickable" src="#arrow-icon" position="-3 1.6 -3" scale="0.5 0.5 0.5"
+                     data-target="reception" data-target-img="#reception"
+                     event-set__enter="_event: mouseenter; scale: 0.6 0.6 0.6"
+                     event-set__leave="_event: mouseleave; scale: 0.5 0.5 0.5">
+            </a-image>
+            <a-text value="Reception" position="-3 1.2 -3" align="center" color="#FFF" scale="1.5 1.5 1.5"></a-text>
+
+            <!-- Info Hotspot in Lobby -->
+            <a-image class="clickable" src="#info-icon" position="3 1.6 -3" scale="0.5 0.5 0.5"
+                     event-set__enter="_event: mouseenter; scale: 0.6 0.6 0.6"
+                     event-set__leave="_event: mouseleave; scale: 0.5 0.5 0.5"
+                     data-info="lobby-info">
+            </a-image>
+            <a-text value="Hotel Information" position="3 1.2 -3" align="center" color="#FFF" scale="1.5 1.5 1.5"></a-text>
+        </a-entity>
+
+        <!-- Room Navigation Points -->
+        <a-entity id="room-hotspots" visible="false">
+            <!-- Multiple navigation points back to lobby -->
+            <a-image class="clickable" src="#arrow-icon" position="0 1.6 4" scale="0.5 0.5 0.5"
+                     data-target="lobby" data-target-img="#lobby"
+                     event-set__enter="_event: mouseenter; scale: 0.6 0.6 0.6"
+                     event-set__leave="_event: mouseleave; scale: 0.5 0.5 0.5">
+            </a-image>
+            <a-text value="Back to Lobby" position="0 1.2 4" align="center" color="#FFF" scale="1.5 1.5 1.5"></a-text>
+
+            <!-- Additional lobby link on the right side -->
+            <a-image class="clickable" src="#home-icon" position="4 1.6 0" scale="0.5 0.5 0.5"
+                     data-target="lobby" data-target-img="#lobby"
+                     event-set__enter="_event: mouseenter; scale: 0.6 0.6 0.6"
+                     event-set__leave="_event: mouseleave; scale: 0.5 0.5 0.5">
+            </a-image>
+            <a-text value="Lobby" position="4 1.2 0" align="center" color="#FFF" scale="1.5 1.5 1.5"></a-text>
+
+            <!-- Additional lobby link on the left side -->
+            <a-image class="clickable" src="#home-icon" position="-4 1.6 0" scale="0.5 0.5 0.5"
+                     data-target="lobby" data-target-img="#lobby"
+                     event-set__enter="_event: mouseenter; scale: 0.6 0.6 0.6"
+                     event-set__leave="_event: mouseleave; scale: 0.5 0.5 0.5">
+            </a-image>
+            <a-text value="Lobby" position="-4 1.2 0" align="center" color="#FFF" scale="1.5 1.5 1.5"></a-text>
+
+            <!-- Info Hotspot in Room -->
+            <a-image class="clickable" src="#info-icon" position="3 1.6 -3" scale="0.5 0.5 0.5"
+                     event-set__enter="_event: mouseenter; scale: 0.6 0.6 0.6"
+                     event-set__leave="_event: mouseleave; scale: 0.5 0.5 0.5"
+                     data-info="room-info">
+            </a-image>
+            <a-text value="Room Details" position="3 1.2 -3" align="center" color="#FFF" scale="1.5 1.5 1.5"></a-text>
+        </a-entity>
+
+        <!-- Reception Navigation Points -->
+        <a-entity id="reception-hotspots" visible="false">
+            <!-- Multiple navigation points back to lobby -->
+            <a-image class="clickable" src="#arrow-icon" position="0 1.6 4" scale="0.5 0.5 0.5"
+                     data-target="lobby" data-target-img="#lobby"
+                     event-set__enter="_event: mouseenter; scale: 0.6 0.6 0.6"
+                     event-set__leave="_event: mouseleave; scale: 0.5 0.5 0.5">
+            </a-image>
+            <a-text value="Back to Lobby" position="0 1.2 4" align="center" color="#FFF" scale="1.5 1.5 1.5"></a-text>
+
+            <!-- Additional lobby link on the right side -->
+            <a-image class="clickable" src="#home-icon" position="4 1.6 0" scale="0.5 0.5 0.5"
+                     data-target="lobby" data-target-img="#lobby"
+                     event-set__enter="_event: mouseenter; scale: 0.6 0.6 0.6"
+                     event-set__leave="_event: mouseleave; scale: 0.5 0.5 0.5">
+            </a-image>
+            <a-text value="Lobby" position="4 1.2 0" align="center" color="#FFF" scale="1.5 1.5 1.5"></a-text>
+
+            <!-- Additional lobby link on the left side -->
+            <a-image class="clickable" src="#home-icon" position="-4 1.6 0" scale="0.5 0.5 0.5"
+                     data-target="lobby" data-target-img="#lobby"
+                     event-set__enter="_event: mouseenter; scale: 0.6 0.6 0.6"
+                     event-set__leave="_event: mouseleave; scale: 0.5 0.5 0.5">
+            </a-image>
+            <a-text value="Lobby" position="-4 1.2 0" align="center" color="#FFF" scale="1.5 1.5 1.5"></a-text>
+
+            <!-- Info Hotspot in Reception -->
+            <a-image class="clickable" src="#info-icon" position="3 1.6 -3" scale="0.5 0.5 0.5"
+                     event-set__enter="_event: mouseenter; scale: 0.6 0.6 0.6"
+                     event-set__leave="_event: mouseleave; scale: 0.5 0.5 0.5"
+                     data-info="reception-info">
+            </a-image>
+            <a-text value="Reception Services" position="3 1.2 -3" align="center" color="#FFF" scale="1.5 1.5 1.5"></a-text>
+        </a-entity>
+
+        <!-- Info Panels -->
+        <a-entity id="info-panels">
+            <a-entity id="lobby-info" class="info-panel" visible="false"
+                      position="0 1.6 -2" rotation="0 0 0" scale="2 2 2">
+                <a-plane color="#222" width="1.5" height="1" opacity="0.85"></a-plane>
+                <a-text value="Hotel Grand VR\nLuxury Stay Experience\n\nFeaturing:\n- 24/7 Concierge\n- Fine Dining\n- Premium Spa\n- Infinity Pool"
+                       position="0 0 0.01" width="1.2" color="white" align="center"></a-text>
+                <a-text value="CLOSE" position="0 -0.4 0.01" width="1.2" color="red" align="center" 
+                       class="clickable" data-action="close-panel"></a-text>
+            </a-entity>
+
+            <a-entity id="room-info" class="info-panel" visible="false"
+                      position="0 1.6 -2" rotation="0 0 0" scale="2 2 2">
+                <a-plane color="#222" width="1.5" height="1" opacity="0.85"></a-plane>
+                <a-text value="Luxury Suite\n\n- King-sized bed\n- 65sq.m\n- Panoramic view\n- Modern design\n- $250/night"
+                       position="0 0 0.01" width="1.2" color="white" align="center"></a-text>
+                <a-text value="BOOK NOW" position="0 -0.3 0.01" width="1.2" color="green" align="center" 
+                       class="clickable" data-action="book-room"></a-text>
+                <a-text value="CLOSE" position="0 -0.45 0.01" width="1.2" color="red" align="center" 
+                       class="clickable" data-action="close-panel"></a-text>
+            </a-entity>
+
+            <a-entity id="reception-info" class="info-panel" visible="false"
+                      position="0 1.6 -2" rotation="0 0 0" scale="2 2 2">
+                <a-plane color="#222" width="1.5" height="1" opacity="0.85"></a-plane>
+                <a-text value="Reception Services\n\n- 24/7 Check-in/Check-out\n- Concierge\n- Luggage Storage\n- Tour Arrangements\n- Local Recommendations"
+                       position="0 0 0.01" width="1.2" color="white" align="center"></a-text>
+                <a-text value="CLOSE" position="0 -0.4 0.01" width="1.2" color="red" align="center" 
+                       class="clickable" data-action="close-panel"></a-text>
+            </a-entity>
+        </a-entity>
+
+        <!-- Booking confirmation panel -->
+        <a-entity id="booking-confirmation" visible="false"
+                  position="0 1.6 -2" rotation="0 0 0" scale="2 2 2">
+            <a-plane color="#005500" width="1.5" height="1" opacity="0.9"></a-plane>
+            <a-text id="booking-text" value="Room Booked!"
+                   position="0 0.2 0.01" width="1.2" color="white" align="center"></a-text>
+            <a-text value="Thank you for choosing Hotel Grand VR"
+                   position="0 0 0.01" width="1.2" color="white" align="center"></a-text>
+            <a-text value="CONTINUE EXPLORING" position="0 -0.3 0.01" width="1.2" color="white" align="center" 
+                   class="clickable" data-action="close-booking"></a-text>
+        </a-entity>
+    </a-scene>
+
+    <!-- 2D UI for Desktop Users -->
+    <div id="desktop-ui">
+        <div id="booking-button" class="ui-button">Book Now</div>
+        <div id="info-button" class="ui-button">Hotel Info</div>
+        <div id="lobby-button" class="ui-button">Return to Lobby</div>
+        <div id="guide-button" class="ui-button">Ask Guide</div>
+    </div>
+
+    <!-- Debugging Helper -->
+    <script>
+        // Add to window load event to verify guide is loaded
+        window.addEventListener('load', function() {
+            console.log('Window loaded, checking guides');
+            
+            // Add click handlers directly to guides
+            document.querySelectorAll('.guide').forEach(guide => {
+                guide.addEventListener('click', function() {
+                    console.log('Guide clicked!');
+                    const location = this.getAttribute('data-location');
+                    if (location) {
+                        window.showGuideExplanation(location);
+                    }
+                });
+            });
+            
+            // Make sure guides have the clickable class
+            document.querySelectorAll('.guide').forEach(guide => {
+                guide.classList.add('clickable');
+            });
+        });
+    </script>
+</body>
+</html> 

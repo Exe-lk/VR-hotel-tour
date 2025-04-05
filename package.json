@@ -1,0 +1,25 @@
+{
+  "name": "vr-hotel-tour",
+  "version": "1.0.0",
+  "description": "Web-based VR hotel tour and booking application",
+  "main": "index.html",
+  "scripts": {
+    "start": "serve .",
+    "dev": "serve -l 3000 ."
+  },
+  "keywords": [
+    "vr",
+    "hotel",
+    "tour",
+    "booking",
+    "a-frame"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "serve": "^14.2.0"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+} 
